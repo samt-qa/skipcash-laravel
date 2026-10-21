@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10="/>
+        <env name="DB_CONNECTION" value="testing"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SKIPCASH_ENV" value="sandbox"/>
+        <env name="SKIPCASH_CLIENT_ID" value="client-id-test"/>
+        <env name="SKIPCASH_KEY_ID" value="9f0c3d6e-1111-4a2b-8c3d-000000000001"/>
+        <env name="SKIPCASH_KEY_SECRET" value="test-key-secret"/>
+        <env name="SKIPCASH_WEBHOOK_KEY" value="test-webhook-key"/>
+    </php>
+</phpunit>

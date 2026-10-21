@@ -1,0 +1,80 @@
+{
+    "name": "samt/skipcash-laravel",
+    "description": "Unofficial, production-grade Laravel SDK for the SkipCash payment gateway (Qatar): hosted checkout, verified webhooks, refunds, tokenization and recurring payments.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "skipcash",
+        "payment",
+        "payment-gateway",
+        "qatar",
+        "qar",
+        "apple-pay",
+        "google-pay",
+        "naps",
+        "webhooks"
+    ],
+    "homepage": "https://github.com/samt-qa/skipcash-laravel",
+    "support": {
+        "issues": "https://github.com/samt-qa/skipcash-laravel/issues",
+        "source": "https://github.com/samt-qa/skipcash-laravel"
+    },
+    "authors": [
+        {
+            "name": "Samt",
+            "homepage": "https://samt.qa"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "laravel/framework": "^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "phpunit/phpunit": "^11.5 || ^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Samt\\SkipCash\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Samt\\SkipCash\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Samt\\SkipCash\\SkipCashServiceProvider"
+            ],
+            "aliases": {
+                "SkipCash": "Samt\\SkipCash\\Facades\\SkipCash"
+            }
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "lint": "pint --test",
+        "fix": "pint",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "check": [
+            "@lint",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": false
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
