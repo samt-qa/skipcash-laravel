@@ -7,6 +7,7 @@ namespace Samt\SkipCash\Webhooks;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Date;
@@ -193,7 +194,7 @@ final class WebhookProcessor
         return (bool) $this->config->get('skipcash.webhooks.verify_paid_via_api', true);
     }
 
-    private function connection(): \Illuminate\Database\ConnectionInterface
+    private function connection(): ConnectionInterface
     {
         $name = $this->config->get('skipcash.database.connection');
 

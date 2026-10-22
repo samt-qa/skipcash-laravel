@@ -10,6 +10,7 @@ use Illuminate\Contracts\Routing\UrlGenerator;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Assert;
 use Samt\SkipCash\Client\SkipCashClient;
+use Samt\SkipCash\Enums\CardBrand;
 use Samt\SkipCash\Enums\Environment;
 use Samt\SkipCash\Enums\PaymentStatus;
 use Samt\SkipCash\Models\SkipCashPayment;
@@ -119,7 +120,7 @@ final class SkipCashFake extends SkipCash
     {
         $ids = is_array($tokenIds) ? $tokenIds : [$tokenIds];
 
-        return array_map(fn (string $id) => new SavedCard($id, '1111', \Samt\SkipCash\Enums\CardBrand::Visa, '12/2030'), $ids);
+        return array_map(fn (string $id) => new SavedCard($id, '1111', CardBrand::Visa, '12/2030'), $ids);
     }
 
     public function environment(): Environment

@@ -12,6 +12,7 @@ use Samt\SkipCash\Enums\PaymentStatus;
 use Samt\SkipCash\Events\PaymentAttemptFailed;
 use Samt\SkipCash\Events\PaymentFailed;
 use Samt\SkipCash\Events\PaymentPaid;
+use Samt\SkipCash\Events\PaymentRefunded;
 use Samt\SkipCash\Events\PaymentStatusChanged;
 use Samt\SkipCash\Events\UnknownPaymentReceived;
 use Samt\SkipCash\Events\WebhookReceived;
@@ -258,13 +259,13 @@ final class WebhookTest extends TestCase
     #[Test]
     public function refund_states_follow_a_paid_payment(): void
     {
-        Event::fake([\Samt\SkipCash\Events\PaymentRefunded::class]);
+        Event::fake([PaymentRefunded::class]);
         $this->seedPayment('pay-1', PaymentStatus::Paid);
 
         $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::PendingRefund))->assertOk()->assertJson(['outcome' => 'applied']);
         $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::Refunded))->assertOk()->assertJson(['outcome' => 'applied']);
 
         $this->assertDatabaseHas('skipcash_payments', ['payment_id' => 'pay-1', 'status' => PaymentStatus::Refunded->value]);
-        Event::assertDispatched(\Samt\SkipCash\Events\PaymentRefunded::class);
+        Event::assertDispatched(PaymentRefunded::class);
     }
 }

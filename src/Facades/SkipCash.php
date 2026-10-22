@@ -31,12 +31,12 @@ final class SkipCash extends Facade
      */
     public static function fake(): SkipCashFake
     {
-        static::$app->make('config')->set('skipcash.webhooks.verify_paid_via_api', false);
+        self::$app->make('config')->set('skipcash.webhooks.verify_paid_via_api', false);
 
-        $fake = static::$app->make(SkipCashFake::class);
+        $fake = self::$app->make(SkipCashFake::class);
 
-        static::$app->instance(\Samt\SkipCash\SkipCash::class, $fake);
-        static::swap($fake);
+        self::$app->instance(\Samt\SkipCash\SkipCash::class, $fake);
+        self::swap($fake);
 
         return $fake;
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Samt\SkipCash\Tests;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Samt\SkipCash\Enums\PaymentStatus;
 use Samt\SkipCash\Facades\SkipCash;
@@ -98,7 +99,7 @@ abstract class TestCase extends Orchestra
     /**
      * @param  array<string, mixed>  $body
      */
-    protected function postWebhook(array $body, ?string $signature = null): \Illuminate\Testing\TestResponse
+    protected function postWebhook(array $body, ?string $signature = null): TestResponse
     {
         return $this->postJson(route('skipcash.webhook'), $body, [
             'Authorization' => $signature ?? $this->webhookSignature($body),

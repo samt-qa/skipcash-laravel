@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Samt\SkipCash\Tests\Feature;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\Test;
 use Samt\SkipCash\Enums\PaymentStatus;
+use Samt\SkipCash\Events\PaymentPaid;
 use Samt\SkipCash\Exceptions\ApiException;
 use Samt\SkipCash\Facades\SkipCash;
 use Samt\SkipCash\Models\SkipCashPayment;
@@ -120,7 +123,7 @@ final class CreatePaymentTest extends TestCase
     #[Test]
     public function transport_failures_are_wrapped(): void
     {
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('timeout'));
+        Http::fake(fn () => throw new ConnectionException('timeout'));
 
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('Could not reach SkipCash');
@@ -164,12 +167,12 @@ final class CreatePaymentTest extends TestCase
             '*/api/v1/payments/pay-3' => Http::response($this->apiEnvelope($this->remotePayment('pay-3', PaymentStatus::Paid))),
         ]);
 
-        \Illuminate\Support\Facades\Event::fake([\Samt\SkipCash\Events\PaymentPaid::class]);
+        Event::fake([PaymentPaid::class]);
 
         SkipCash::createPayment(CreatePayment::make(100, 'A', 'B', '55123456', 'a@b.co', transactionId: 'ORD-1'));
         SkipCash::sync('pay-3');
 
         $this->assertDatabaseHas('skipcash_payments', ['payment_id' => 'pay-3', 'status' => PaymentStatus::Paid->value]);
-        \Illuminate\Support\Facades\Event::assertDispatched(\Samt\SkipCash\Events\PaymentPaid::class, fn ($e) => $e->payment->payment_id === 'pay-3' && $e->webhook === null);
+        Event::assertDispatched(PaymentPaid::class, fn ($e) => $e->payment->payment_id === 'pay-3' && $e->webhook === null);
     }
 }
