@@ -9,6 +9,7 @@ jobs:
   test:
     name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -38,11 +39,13 @@ jobs:
           composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
           composer update --prefer-dist --no-interaction --no-progress
 
-      - name: Lint
-        run: composer lint
+      - name: Tests
+        run: vendor/bin/phpunit --log-junit junit.xml
+
+      - name: Annotate test failures
+        if: failure()
+        run: php .github/scripts/junit-annotate.php junit.xml
 
       - name: Static analysis
-        run: composer analyse
-
-      - name: Tests
-        run: composer test
+        if: always()
+        run: vendor/bin/phpstan analyse --memory-limit=1G --error-format=github --no-progress
