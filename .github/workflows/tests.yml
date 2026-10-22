@@ -40,11 +40,13 @@ jobs:
           composer update --prefer-dist --no-interaction --no-progress
 
       - name: Tests
-        run: vendor/bin/phpunit --log-junit junit.xml
+        run: |
+          set -o pipefail
+          vendor/bin/phpunit --log-junit junit.xml 2>&1 | tee phpunit.log
 
       - name: Annotate test failures
         if: failure()
-        run: php .github/scripts/junit-annotate.php junit.xml
+        run: php .github/scripts/junit-annotate.php junit.xml phpunit.log
 
       - name: Static analysis
         if: always()
