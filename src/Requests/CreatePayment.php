@@ -147,8 +147,6 @@ final class CreatePayment
 
     /**
      * Set one of Custom1..Custom10. Custom1 participates in the signature.
-     *
-     * @param  int<1, 10>  $slot
      */
     public function withCustom(int $slot, string $value): self
     {

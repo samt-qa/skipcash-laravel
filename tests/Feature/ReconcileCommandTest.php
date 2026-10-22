@@ -16,7 +16,7 @@ use Samt\SkipCash\Tests\TestCase;
 
 final class ReconcileCommandTest extends TestCase
 {
-    private function seed(string $id, PaymentStatus $status, int $minutesAgo): SkipCashPayment
+    private function seedPayment(string $id, PaymentStatus $status, int $minutesAgo): SkipCashPayment
     {
         $record = SkipCashPayment::query()->create([
             'payment_id' => $id,
@@ -37,11 +37,11 @@ final class ReconcileCommandTest extends TestCase
     {
         Event::fake([PaymentPaid::class, PaymentCanceled::class]);
 
-        $this->seed('stale-paid', PaymentStatus::New, 30);
-        $this->seed('stale-canceled', PaymentStatus::Pending, 30);
-        $this->seed('fresh', PaymentStatus::New, 2);
-        $this->seed('already-paid', PaymentStatus::Paid, 30);
-        $this->seed('ancient', PaymentStatus::New, 60 * 100);
+        $this->seedPayment('stale-paid', PaymentStatus::New, 30);
+        $this->seedPayment('stale-canceled', PaymentStatus::Pending, 30);
+        $this->seedPayment('fresh', PaymentStatus::New, 2);
+        $this->seedPayment('already-paid', PaymentStatus::Paid, 30);
+        $this->seedPayment('ancient', PaymentStatus::New, 60 * 100);
 
         Http::fake([
             '*/api/v1/payments/stale-paid' => Http::response($this->apiEnvelope($this->remotePayment('stale-paid', PaymentStatus::Paid))),
@@ -63,7 +63,7 @@ final class ReconcileCommandTest extends TestCase
     #[Test]
     public function a_refund_on_the_original_payment_is_promoted_to_a_transition(): void
     {
-        $this->seed('p', PaymentStatus::Paid, 30);
+        $this->seedPayment('p', PaymentStatus::Paid, 30);
         Http::fake(['*/api/v1/payments/p' => Http::response($this->apiEnvelope($this->remotePayment('p', PaymentStatus::Paid, ['refundId' => 'r', 'refundStatusId' => 6])))]);
 
         $this->artisan('skipcash:reconcile', ['--payment' => 'p'])->assertSuccessful();
@@ -74,8 +74,8 @@ final class ReconcileCommandTest extends TestCase
     #[Test]
     public function api_errors_are_reported_without_aborting_the_run(): void
     {
-        $this->seed('bad', PaymentStatus::New, 30);
-        $this->seed('good', PaymentStatus::New, 30);
+        $this->seedPayment('bad', PaymentStatus::New, 30);
+        $this->seedPayment('good', PaymentStatus::New, 30);
 
         Http::fake([
             '*/api/v1/payments/bad' => Http::response(['hasError' => true, 'errorMessage' => 'boom', 'returnCode' => 500], 500),

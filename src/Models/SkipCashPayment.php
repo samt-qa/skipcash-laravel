@@ -64,7 +64,11 @@ class SkipCashPayment extends Model
         return config('skipcash.database.connection') ?: parent::getConnectionName();
     }
 
-    /** The order / invoice / booking this payment belongs to (optional). */
+    /**
+     * The order / invoice / booking this payment belongs to (optional).
+     *
+     * @return MorphTo<Model, $this>
+     */
     public function payable(): MorphTo
     {
         return $this->morphTo();

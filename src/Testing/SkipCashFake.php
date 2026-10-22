@@ -168,15 +168,9 @@ final class SkipCashFake extends SkipCash
             return;
         }
 
-        foreach ($this->created as $entry) {
-            if ($callback($entry['request'], $entry['payment'])) {
-                Assert::assertTrue(true);
+        $matched = array_filter($this->created, static fn (array $entry): bool => (bool) $callback($entry['request'], $entry['payment']));
 
-                return;
-            }
-        }
-
-        Assert::fail('No SkipCash payment matched the given callback.');
+        Assert::assertNotEmpty($matched, 'No SkipCash payment matched the given callback.');
     }
 
     public function assertNothingCreated(): void
@@ -193,15 +187,12 @@ final class SkipCashFake extends SkipCash
     {
         $expected = $amount === null ? null : Amount::format($amount);
 
-        foreach ($this->refunds as $refund) {
-            if ($refund['paymentId'] === $paymentId && ($expected === null || $refund['amount'] === $expected)) {
-                Assert::assertTrue(true);
+        $matched = array_filter(
+            $this->refunds,
+            static fn (array $refund): bool => $refund['paymentId'] === $paymentId && ($expected === null || $refund['amount'] === $expected),
+        );
 
-                return;
-            }
-        }
-
-        Assert::fail("Payment [{$paymentId}] was not refunded".($expected === null ? '' : " for {$expected}").'.');
+        Assert::assertNotEmpty($matched, "Payment [{$paymentId}] was not refunded".($expected === null ? '' : " for {$expected}").'.');
     }
 
     public function assertSubscriptionCancelled(string $subscriptionId): void
