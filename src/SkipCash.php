@@ -6,10 +6,12 @@ namespace Samt\SkipCash;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Routing\UrlGenerator;
+use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Database\Eloquent\Model;
 use Samt\SkipCash\Client\SkipCashClient;
 use Samt\SkipCash\Enums\Environment;
 use Samt\SkipCash\Models\SkipCashPayment;
+use Samt\SkipCash\Payments\Applied;
 use Samt\SkipCash\Payments\PaymentRecorder;
 use Samt\SkipCash\Payments\Transition;
 use Samt\SkipCash\Requests\CreatePayment;
@@ -31,6 +33,7 @@ class SkipCash
         protected readonly PaymentRecorder $recorder,
         protected readonly Repository $config,
         protected readonly UrlGenerator $url,
+        protected readonly ConnectionResolverInterface $db,
     ) {}
 
     /**
@@ -70,11 +73,7 @@ class SkipCash
     {
         $payment = $this->payment($paymentId);
 
-        $record = SkipCashPayment::query()->where('payment_id', $paymentId)->first();
-
-        if ($record !== null) {
-            $this->recorder->applyRemote($record, $payment);
-        }
+        $this->applyLocked($paymentId, $payment);
 
         return $payment;
     }
@@ -84,7 +83,40 @@ class SkipCash
      */
     public function syncRecord(SkipCashPayment $record): Transition
     {
-        return $this->recorder->applyRemote($record, $this->payment($record->payment_id));
+        $applied = $this->applyLocked($record->payment_id, $this->payment($record->payment_id));
+
+        if ($applied === null) {
+            return Transition::Unchanged;
+        }
+
+        $record->refresh();
+
+        return $applied->transition;
+    }
+
+    /**
+     * Apply a remote status under a row lock, then dispatch the events after commit.
+     *
+     * The return URL and a webhook routinely race for the same payment; the lock
+     * serialises them so each transition, and each PaymentPaid, happens once.
+     */
+    protected function applyLocked(string $paymentId, Payment $payment): ?Applied
+    {
+        $name = $this->config->get('skipcash.database.connection');
+        $connection = $this->db->connection(is_string($name) && $name !== '' ? $name : null);
+
+        /** @var Applied|null $applied */
+        $applied = $connection->transaction(function () use ($paymentId, $payment): ?Applied {
+            $record = SkipCashPayment::query()->where('payment_id', $paymentId)->lockForUpdate()->first();
+
+            return $record === null ? null : $this->recorder->applyRemoteDeferred($record, $payment);
+        });
+
+        if ($applied !== null) {
+            $this->recorder->dispatch($applied->events);
+        }
+
+        return $applied;
     }
 
     /**

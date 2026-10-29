@@ -93,7 +93,8 @@ enum PaymentStatus: int
             self::Paid => $next->isRefundRelated(),
             self::PendingRefund => in_array($next, [self::Refunded, self::RefundFailed], true),
             self::RefundFailed => in_array($next, [self::PendingRefund, self::Refunded], true),
-            self::Refunded => false,
+            // A further partial refund on an already (partially) refunded payment.
+            self::Refunded => $next === self::PendingRefund,
             self::Canceled, self::Failed, self::Rejected => $next === self::Paid,
         };
     }

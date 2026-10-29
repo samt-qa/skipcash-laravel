@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Samt\SkipCash\Tests\Feature;
 
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\Test;
@@ -14,6 +15,7 @@ use Samt\SkipCash\Events\PaymentFailed;
 use Samt\SkipCash\Events\PaymentPaid;
 use Samt\SkipCash\Events\PaymentRefunded;
 use Samt\SkipCash\Events\PaymentStatusChanged;
+use Samt\SkipCash\Events\RefundPending;
 use Samt\SkipCash\Events\UnknownPaymentReceived;
 use Samt\SkipCash\Events\WebhookReceived;
 use Samt\SkipCash\Jobs\ProcessWebhook;
@@ -178,14 +180,107 @@ final class WebhookTest extends TestCase
         $this->assertNull($event->processed_at, 'must stay unprocessed so SkipCash\'s retry is applied');
         $this->assertNotNull($event->failed_at);
         $this->assertStringContainsString('listener exploded', (string) $event->error);
+        $this->assertSame(PaymentStatus::New->value, $event->from_status_id);
 
-        // The status change itself was rolled back with the transaction.
-        $this->assertDatabaseHas('skipcash_payments', ['payment_id' => 'pay-1', 'status' => PaymentStatus::New->value]);
+        // The transition itself is committed: money was captured, the record says so.
+        $this->assertDatabaseHas('skipcash_payments', ['payment_id' => 'pay-1', 'status' => PaymentStatus::Paid->value]);
 
-        // SkipCash retries an hour later; the listener is fixed by then.
+        // SkipCash retries an hour later; the listener is fixed by then and the
+        // events are replayed for it, without re-applying the transition.
         Event::forget(PaymentPaid::class);
+        $replayed = [];
+        Event::listen(PaymentStatusChanged::class, function (PaymentStatusChanged $e) use (&$replayed): void {
+            $replayed[] = [$e->from, $e->to];
+        });
+
         $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::Paid))->assertOk()->assertJson(['outcome' => 'applied']);
-        $this->assertSame(2, SkipCashWebhookEvent::query()->firstOrFail()->attempts);
+
+        $this->assertSame([[PaymentStatus::New, PaymentStatus::Paid]], $replayed);
+        $event->refresh();
+        $this->assertSame(2, $event->attempts);
+        $this->assertNotNull($event->processed_at);
+        $this->assertSame(1, SkipCashWebhookEvent::query()->count());
+
+        // And once processed, a further redelivery is a plain duplicate.
+        $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::Paid))->assertOk()->assertJson(['outcome' => 'duplicate']);
+    }
+
+    #[Test]
+    public function listeners_run_after_the_transaction_has_committed(): void
+    {
+        $this->seedPayment();
+
+        // The test case itself may wrap everything in a transaction; measure relative to that.
+        $base = DB::transactionLevel();
+
+        $seen = [];
+        Event::listen(PaymentPaid::class, function (PaymentPaid $e) use (&$seen): void {
+            $seen['level'] = DB::transactionLevel();
+            $seen['status'] = SkipCashPayment::query()->where('payment_id', 'pay-1')->value('status');
+        });
+
+        $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::Paid))->assertOk();
+
+        $this->assertSame($base, $seen['level'], 'listener must not run inside the webhook transaction');
+        $this->assertSame(PaymentStatus::Paid, $seen['status'], 'a listener re-reading the row must see the committed status');
+    }
+
+    #[Test]
+    public function a_failed_attempt_on_an_already_paid_order_is_recorded_not_ignored(): void
+    {
+        Event::fake([PaymentAttemptFailed::class, PaymentFailed::class]);
+        $this->seedPayment('pay-1', PaymentStatus::Paid, 'ORD-1');
+
+        $this->postWebhook($this->webhookBody('pay-1-later', PaymentStatus::Failed, ['TransactionId' => 'ORD-1']))
+            ->assertOk()
+            ->assertJson(['outcome' => 'applied']);
+
+        $this->assertDatabaseHas('skipcash_payments', ['payment_id' => 'pay-1', 'status' => PaymentStatus::Paid->value]);
+        $this->assertDatabaseHas('skipcash_payments', ['payment_id' => 'pay-1-later', 'status' => PaymentStatus::Failed->value]);
+        Event::assertNotDispatched(PaymentAttemptFailed::class);
+        Event::assertDispatched(PaymentFailed::class, fn ($e) => $e->payment->payment_id === 'pay-1-later');
+    }
+
+    #[Test]
+    public function a_failed_recurring_instalment_is_recorded_under_its_own_id(): void
+    {
+        Event::fake([PaymentAttemptFailed::class, PaymentFailed::class]);
+        $first = $this->seedPayment('sub-first', PaymentStatus::Paid, 'SUB-1');
+        $first->forceFill(['recurring_subscription_id' => 'f0e1d2c3-0000-4000-8000-000000000001'])->save();
+
+        $this->postWebhook($this->webhookBody('sub-instalment-2', PaymentStatus::Failed, [
+            'TransactionId' => 'SUB-1',
+            'RecurringSubscriptionId' => 'f0e1d2c3-0000-4000-8000-000000000001',
+        ]))->assertOk()->assertJson(['outcome' => 'applied']);
+
+        $this->assertDatabaseHas('skipcash_payments', [
+            'payment_id' => 'sub-instalment-2',
+            'status' => PaymentStatus::Failed->value,
+            'recurring_subscription_id' => 'f0e1d2c3-0000-4000-8000-000000000001',
+        ]);
+        Event::assertDispatched(PaymentFailed::class, fn ($e) => $e->payment->payment_id === 'sub-instalment-2');
+        Event::assertNotDispatched(PaymentAttemptFailed::class);
+    }
+
+    #[Test]
+    public function a_second_partial_refund_is_processed_not_deduplicated(): void
+    {
+        Event::fake([RefundPending::class, PaymentRefunded::class]);
+        $this->seedPayment('pay-1', PaymentStatus::Paid);
+
+        $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::PendingRefund))->assertOk()->assertJson(['outcome' => 'applied']);
+        $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::Refunded))->assertOk()->assertJson(['outcome' => 'applied']);
+
+        // Second partial refund: same (payment, status) pair as before, but it is a real transition.
+        $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::PendingRefund))->assertOk()->assertJson(['outcome' => 'applied']);
+        $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::Refunded))->assertOk()->assertJson(['outcome' => 'applied']);
+
+        // A true redelivery of the last one is still a duplicate.
+        $this->postWebhook($this->webhookBody('pay-1', PaymentStatus::Refunded))->assertOk()->assertJson(['outcome' => 'duplicate']);
+
+        Event::assertDispatchedTimes(RefundPending::class, 2);
+        Event::assertDispatchedTimes(PaymentRefunded::class, 2);
+        $this->assertSame(4, SkipCashWebhookEvent::query()->count());
     }
 
     #[Test]

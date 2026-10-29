@@ -87,7 +87,18 @@ final class PaymentRecorder
      */
     public function applyWebhook(SkipCashPayment $record, WebhookPayload $payload): Transition
     {
-        return $this->apply($record, $payload->status, [
+        $applied = $this->applyWebhookDeferred($record, $payload);
+        $this->dispatch($applied->events);
+
+        return $applied->transition;
+    }
+
+    /**
+     * Same as applyWebhook() but leaves the events for the caller to dispatch after commit.
+     */
+    public function applyWebhookDeferred(SkipCashPayment $record, WebhookPayload $payload): Applied
+    {
+        return $this->applyDeferred($record, $payload->status, [
             'visa_id' => $payload->visaId,
             'token_id' => $payload->tokenId,
             'card_type' => $payload->cardType,
@@ -101,6 +112,17 @@ final class PaymentRecorder
      * Apply a status read from GET /api/v1/payments/{id}.
      */
     public function applyRemote(SkipCashPayment $record, Payment $payment): Transition
+    {
+        $applied = $this->applyRemoteDeferred($record, $payment);
+        $this->dispatch($applied->events);
+
+        return $applied->transition;
+    }
+
+    /**
+     * Same as applyRemote() but leaves the events for the caller to dispatch after commit.
+     */
+    public function applyRemoteDeferred(SkipCashPayment $record, Payment $payment): Applied
     {
         $attributes = [
             'visa_id' => $payment->visaId,
@@ -122,13 +144,31 @@ final class PaymentRecorder
             ? $payment->refundStatus
             : $payment->status;
 
-        return $this->apply($record, $status, $attributes, null);
+        return $this->applyDeferred($record, $status, $attributes, null);
     }
 
     /**
+     * Apply a status and dispatch the resulting events immediately.
+     *
+     * Only use this outside a database transaction. Inside one, call
+     * applyDeferred() and dispatch() the events after the commit.
+     *
      * @param  array<string, mixed>  $attributes  Metadata to merge; nulls never overwrite existing values.
      */
     public function apply(SkipCashPayment $record, PaymentStatus $to, array $attributes, ?WebhookPayload $source): Transition
+    {
+        $applied = $this->applyDeferred($record, $to, $attributes, $source);
+        $this->dispatch($applied->events);
+
+        return $applied->transition;
+    }
+
+    /**
+     * Apply a status to the record without dispatching anything.
+     *
+     * @param  array<string, mixed>  $attributes  Metadata to merge; nulls never overwrite existing values.
+     */
+    public function applyDeferred(SkipCashPayment $record, PaymentStatus $to, array $attributes, ?WebhookPayload $source): Applied
     {
         $from = $record->status;
 
@@ -150,7 +190,7 @@ final class PaymentRecorder
                 'source' => $source === null ? 'reconcile' : 'webhook',
             ]);
 
-            return Transition::Rejected;
+            return new Applied(Transition::Rejected, $from, $to, []);
         }
 
         foreach ($attributes as $key => $value) {
@@ -162,7 +202,7 @@ final class PaymentRecorder
         if ($from === $to) {
             $record->save();
 
-            return Transition::Unchanged;
+            return new Applied(Transition::Unchanged, $from, $to, []);
         }
 
         $record->status = $to;
@@ -173,7 +213,18 @@ final class PaymentRecorder
 
         $record->save();
 
-        $this->events()->dispatch(new PaymentStatusChanged($record, $from, $to, $source));
+        return new Applied(Transition::Applied, $from, $to, $this->eventsFor($record, $from, $to, $source));
+    }
+
+    /**
+     * The lifecycle events that announce a transition, in dispatch order.
+     * Used again to replay a delivery whose listeners failed after commit.
+     *
+     * @return list<object>
+     */
+    public function eventsFor(SkipCashPayment $record, PaymentStatus $from, PaymentStatus $to, ?WebhookPayload $source): array
+    {
+        $events = [new PaymentStatusChanged($record, $from, $to, $source)];
 
         $event = match ($to) {
             PaymentStatus::Paid => new PaymentPaid($record, $source),
@@ -186,9 +237,21 @@ final class PaymentRecorder
         };
 
         if ($event !== null) {
-            $this->events()->dispatch($event);
+            $events[] = $event;
         }
 
-        return Transition::Applied;
+        return $events;
+    }
+
+    /**
+     * @param  list<object>  $events
+     */
+    public function dispatch(array $events): void
+    {
+        $dispatcher = $this->events();
+
+        foreach ($events as $event) {
+            $dispatcher->dispatch($event);
+        }
     }
 }

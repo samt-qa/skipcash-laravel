@@ -73,10 +73,16 @@ final class PaymentStatusTest extends TestCase
     }
 
     #[Test]
-    public function refunded_is_terminal(): void
+    public function refunded_only_accepts_a_further_partial_refund(): void
     {
         foreach (PaymentStatus::cases() as $next) {
-            $this->assertFalse(PaymentStatus::Refunded->canTransitionTo($next));
+            if ($next === PaymentStatus::PendingRefund) {
+                $this->assertTrue(PaymentStatus::Refunded->canTransitionTo($next));
+
+                continue;
+            }
+
+            $this->assertFalse(PaymentStatus::Refunded->canTransitionTo($next), "refunded → {$next->label()} must be rejected");
         }
     }
 }

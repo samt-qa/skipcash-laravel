@@ -152,10 +152,10 @@ Route::get('/checkout/return', function (Request $request) {
 A route is registered at `POST /skipcash/webhook` (configurable). The pipeline:
 
 1. **Signature** — `VerifyWebhookSignature` middleware recomputes HMAC-SHA256 over `PaymentId, Amount, StatusId, TransactionId, Custom1, VisaId` with your webhook key and compares in constant time. Mismatch → `401`, nothing is stored.
-2. **Inbox** — each `(payment_id, status_id)` delivery is recorded in `skipcash_webhook_events`. Redeliveries are acknowledged with `200` and skipped.
+2. **Inbox** — every delivery is recorded in `skipcash_webhook_events`. A redelivery that would not change the record (same status again, or a status the record can no longer move to) is acknowledged with `200` and skipped. The same status arriving twice legitimately, such as `pending refund` for a second partial refund, is processed.
 3. **State machine** — `paid` never regresses to `failed`/`canceled`, however late those arrive. A late `paid` after `failed` wins.
 4. **Verification** — for `paid`, the payment is re-read from the API and status + amount must match (`webhooks.verify_paid_via_api`). On mismatch the delivery is left unprocessed and a `500` is returned so SkipCash retries.
-5. **Commit** — the transition and your listeners run inside one database transaction. The delivery is marked processed only when all of it succeeds. If a listener throws, nothing is marked paid and SkipCash's retry (1 h, then 1 d) replays the event.
+5. **Commit, then notify** — the transition is committed under a row lock first, then your listeners run, then the delivery is marked processed. Listeners therefore always see the committed status, queued or not. If a listener throws, the status stays (the money did move) but the delivery stays unprocessed, and SkipCash's retry (1 h, then 1 d) replays the same events so the listener gets another chance. Listeners doing real work should be queued with their own retries.
 
 The route has no middleware other than the signature check by default. Do not put it behind the `api` group: its rate limiter can answer SkipCash's retries with `429`. Add your own via `webhooks.middleware`.
 
@@ -570,10 +570,10 @@ Route::get('/checkout/return', function (Request $request) {
 يُسجَّل مسار على `POST /skipcash/webhook` (قابل للتغيير). مراحل المعالجة:
 
 1. **التوقيع:** يعيد الوسيط `VerifyWebhookSignature` حساب HMAC-SHA256 على الحقول `PaymentId, Amount, StatusId, TransactionId, Custom1, VisaId` بمفتاح الإشعارات، ويقارن بزمن ثابت. عند عدم التطابق يرد `401` ولا يُخزَّن شيء.
-2. **صندوق الوارد:** تُسجَّل كل رسالة `(payment_id, status_id)`&lrm; في جدول `skipcash_webhook_events`. الرسائل المكررة يُرد عليها بـ `200` وتُتجاهل.
+2. **صندوق الوارد:** تُسجَّل كل رسالة في جدول `skipcash_webhook_events`. الرسالة المعادة التي لن تغيّر السجل (نفس الحالة مرة أخرى، أو حالة لم يعد السجل يقبلها) يُرد عليها بـ `200` وتُتجاهل. أما تكرار الحالة نفسها بشكل مشروع، مثل `pending refund` لاسترداد جزئي ثانٍ، فيُعالج.
 3. **آلة الحالات:** لا تتراجع الدفعة من `paid` إلى `failed` أو `canceled` مهما تأخر وصولهما. أما `paid` المتأخرة بعد `failed` فتُعتمد.
 4. **التأكيد:** عند `paid` يُعاد الاستعلام عن الدفعة من الـ API، ويجب أن تتطابق الحالة والمبلغ (`webhooks.verify_paid_via_api`). عند الاختلاف تبقى الرسالة غير معالجة ويُرد `500` ليعيد SkipCash الإرسال.
-5. **الاعتماد:** يُنفَّذ الانتقال والمستمعون في معاملة قاعدة بيانات واحدة، ولا تُسجَّل الرسالة كمعالجة إلا إذا نجح كل ذلك. لو فشل أحد المستمعين لا تُعتمد الدفعة، وإعادة الإرسال من SkipCash (بعد ساعة ثم بعد يوم) تعيد المحاولة.
+5. **الاعتماد ثم الإشعار:** يُعتمد الانتقال أولاً تحت قفل على الصف، ثم يعمل المستمعون، ثم تُسجَّل الرسالة كمعالجة. فيرى المستمعون دائماً الحالة المعتمدة، سواء كانوا في الطابور أم لا. لو فشل أحد المستمعين تبقى الحالة (فالمال تحرك فعلاً) وتبقى الرسالة غير معالجة، وإعادة الإرسال من SkipCash (بعد ساعة ثم بعد يوم) تعيد إطلاق الأحداث نفسها ليحصل المستمع على فرصة أخرى. المستمعون الذين ينفذون عملاً حقيقياً يُفضَّل وضعهم في الطابور مع إعادة محاولات خاصة بهم.
 
 ليس على المسار أي وسيط افتراضيًا غير فحص التوقيع. لا تضعه ضمن مجموعة `api`، فمحدّد المعدّل فيها قد يرد على إعادات SkipCash بـ `429`. أضف ما تريده عبر `webhooks.middleware`.
 

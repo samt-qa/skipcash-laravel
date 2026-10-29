@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $id
  * @property string $payment_id
  * @property int $status_id
+ * @property int|null $from_status_id
  * @property string|null $transaction_id
  * @property array<string, mixed> $payload
  * @property int $attempts
@@ -31,6 +32,7 @@ class SkipCashWebhookEvent extends Model
         'payload' => 'array',
         'attempts' => 'integer',
         'status_id' => 'integer',
+        'from_status_id' => 'integer',
         'received_at' => 'immutable_datetime',
         'processed_at' => 'immutable_datetime',
         'failed_at' => 'immutable_datetime',

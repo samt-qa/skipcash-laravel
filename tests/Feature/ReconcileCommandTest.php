@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Samt\SkipCash\Tests\Feature;
 
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use PHPUnit\Framework\Attributes\Test;
 use Samt\SkipCash\Enums\PaymentStatus;
 use Samt\SkipCash\Events\PaymentCanceled;
 use Samt\SkipCash\Events\PaymentPaid;
+use Samt\SkipCash\Facades\SkipCash;
 use Samt\SkipCash\Models\SkipCashPayment;
 use Samt\SkipCash\Tests\TestCase;
 
@@ -58,6 +60,35 @@ final class ReconcileCommandTest extends TestCase
 
         Event::assertDispatched(PaymentPaid::class, fn ($e) => $e->payment->payment_id === 'stale-paid' && $e->webhook === null);
         Event::assertDispatched(PaymentCanceled::class);
+    }
+
+    #[Test]
+    public function sync_applies_the_remote_status_once_and_dispatches_after_commit(): void
+    {
+        $this->seedPayment('p', PaymentStatus::New, 1);
+        Http::fake(['*/api/v1/payments/p' => Http::response($this->apiEnvelope($this->remotePayment('p', PaymentStatus::Paid)))]);
+
+        $base = DB::transactionLevel();
+        $seen = [];
+        Event::listen(PaymentPaid::class, function (PaymentPaid $e) use (&$seen): void {
+            $seen[] = DB::transactionLevel();
+        });
+
+        // The return URL handler and a reconcile run both land on the same payment.
+        $this->assertTrue(SkipCash::sync('p')->isPaid());
+        $this->assertTrue(SkipCash::sync('p')->isPaid());
+
+        $this->assertSame([$base], $seen, 'PaymentPaid fires exactly once, outside the transaction');
+        $this->assertDatabaseHas('skipcash_payments', ['payment_id' => 'p', 'status' => PaymentStatus::Paid->value]);
+    }
+
+    #[Test]
+    public function sync_of_an_unknown_payment_returns_the_remote_payment_without_recording_it(): void
+    {
+        Http::fake(['*/api/v1/payments/ghost' => Http::response($this->apiEnvelope($this->remotePayment('ghost', PaymentStatus::Paid)))]);
+
+        $this->assertTrue(SkipCash::sync('ghost')->isPaid());
+        $this->assertDatabaseMissing('skipcash_payments', ['payment_id' => 'ghost']);
     }
 
     #[Test]

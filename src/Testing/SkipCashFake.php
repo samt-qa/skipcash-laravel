@@ -7,6 +7,7 @@ namespace Samt\SkipCash\Testing;
 use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Routing\UrlGenerator;
+use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Assert;
 use Samt\SkipCash\Client\SkipCashClient;
@@ -52,8 +53,9 @@ final class SkipCashFake extends SkipCash
         PaymentRecorder $recorder,
         Repository $config,
         UrlGenerator $url,
+        ConnectionResolverInterface $db,
     ) {
-        parent::__construct($client, $recorder, $config, $url);
+        parent::__construct($client, $recorder, $config, $url, $db);
     }
 
     public function createPayment(CreatePayment $request, ?Model $payable = null): Payment
