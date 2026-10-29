@@ -6,6 +6,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-29
+
+First stable release.
+
 ### Added
 - Hosted-checkout payment creation with local validation of all documented constraints.
 - Signed requests for refunds, subscription cancellation and card update.
@@ -25,3 +29,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Verified
 - End-to-end against the SkipCash Sandbox: hosted checkout, 3-D Secure, `paid` webhook (signature, inbox, API confirmation, tokenisation), failed attempt on an existing link (`PaymentAttemptFailed`), return-URL parameters (`id`, `statusId`, `status`, `transId`, `custom1`), signature rejection (401), regression and duplicate handling, `skipcash:reconcile`.
+
+### Known limitations
+- Refunds: request signing and field names are accepted by the sandbox, but the sandbox kept answering "Transaction can't be yet refunded" for the whole test window, so the success response shape has not been observed live.
+- Saved-card details (`savedCards()`), recurring payments, subscription cancellation and card update match the documentation but have not yet been exercised against the sandbox.
+
+[Unreleased]: https://github.com/samt-qa/skipcash-laravel/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/samt-qa/skipcash-laravel/releases/tag/v1.0.0
