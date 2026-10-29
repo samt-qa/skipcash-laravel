@@ -21,6 +21,12 @@ enum PaymentStatus: int
     case PendingRefund = 7;
     case RefundFailed = 8;
 
+    /**
+     * The shopper has started paying (card entered, 3-D Secure in progress).
+     * SkipCash resets it to New if the payment is not completed within 2 minutes.
+     */
+    case InProgress = 12;
+
     public function label(): string
     {
         return match ($this) {
@@ -33,6 +39,7 @@ enum PaymentStatus: int
             self::Refunded => 'refunded',
             self::PendingRefund => 'pending refund',
             self::RefundFailed => 'refund failed',
+            self::InProgress => 'in progress',
         };
     }
 
@@ -48,10 +55,20 @@ enum PaymentStatus: int
         return in_array($this, [self::Canceled, self::Failed, self::Rejected], true);
     }
 
+    /**
+     * Backing values of every open status, for query builders.
+     *
+     * @return list<int>
+     */
+    public static function openValues(): array
+    {
+        return [self::New->value, self::Pending->value, self::InProgress->value];
+    }
+
     /** The payment is still open and may transition. */
     public function isOpen(): bool
     {
-        return in_array($this, [self::New, self::Pending], true);
+        return in_array($this, [self::New, self::Pending, self::InProgress], true);
     }
 
     public function isRefundRelated(): bool
@@ -72,7 +89,7 @@ enum PaymentStatus: int
         }
 
         return match ($this) {
-            self::New, self::Pending => true,
+            self::New, self::Pending, self::InProgress => true,
             self::Paid => $next->isRefundRelated(),
             self::PendingRefund => in_array($next, [self::Refunded, self::RefundFailed], true),
             self::RefundFailed => in_array($next, [self::PendingRefund, self::Refunded], true),

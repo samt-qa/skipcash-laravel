@@ -15,3 +15,7 @@ to [Semantic Versioning](https://semver.org/).
 - Tokenisation, recurring payments and QPAY debit-only flow.
 - `SkipCash::fake()` test double with assertions.
 - `CredentialsResolver` contract for multi-tenant applications.
+- `PaymentStatus::InProgress` (`statusId` 12): the shopper has started paying (3-D Secure in progress). Treated as an open status; SkipCash resets it to `New` after 2 minutes.
+
+### Verified
+- End-to-end against the SkipCash Sandbox: hosted checkout, 3-D Secure, `paid` webhook (signature, inbox, API confirmation, tokenisation), failed attempt on an existing link (`PaymentAttemptFailed`), return-URL parameters (`id`, `statusId`, `status`, `transId`, `custom1`), signature rejection (401), regression and duplicate handling, `skipcash:reconcile`.

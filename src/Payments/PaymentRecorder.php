@@ -182,7 +182,7 @@ final class PaymentRecorder
             PaymentStatus::Refunded => new PaymentRefunded($record, $source),
             PaymentStatus::PendingRefund => new RefundPending($record, $source),
             PaymentStatus::RefundFailed => new RefundFailed($record, $source),
-            PaymentStatus::New, PaymentStatus::Pending => null,
+            PaymentStatus::New, PaymentStatus::Pending, PaymentStatus::InProgress => null,
         };
 
         if ($event !== null) {

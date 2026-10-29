@@ -359,6 +359,7 @@ The resolver is called per request, so tenant identification from the current re
 | 6 | `PaymentStatus::Refunded` | refund settled |
 | 7 | `PaymentStatus::PendingRefund` | refund in progress |
 | 8 | `PaymentStatus::RefundFailed` | refund failed |
+| 12 | `PaymentStatus::InProgress` | shopper is paying (3-D Secure); resets to 0 after 2 min |
 
 ### Signature algorithm
 
@@ -844,6 +845,7 @@ $this->app->bind(CredentialsResolver::class, TenantCredentials::class);
 | 6 | `PaymentStatus::Refunded` | تم الاسترداد |
 | 7 | `PaymentStatus::PendingRefund` | الاسترداد جارٍ |
 | 8 | `PaymentStatus::RefundFailed` | فشل الاسترداد |
+| 12 | `PaymentStatus::InProgress` | العميل يدفع الآن (3-D Secure)؛ ترجع إلى 0 بعد دقيقتين |
 
 ### خوارزمية التوقيع
 

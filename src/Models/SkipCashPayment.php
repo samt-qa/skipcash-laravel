@@ -90,7 +90,7 @@ class SkipCashPayment extends Model
      */
     public function scopeOpen(Builder $query): Builder
     {
-        return $query->whereIn('status', [PaymentStatus::New->value, PaymentStatus::Pending->value]);
+        return $query->whereIn('status', PaymentStatus::openValues());
     }
 
     /**
